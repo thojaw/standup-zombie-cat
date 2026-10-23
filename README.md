@@ -1,5 +1,9 @@
 # Stand-Up Zombie Cat
 
+<p align="center">
+  <img src="docs/cat-unamused.png" alt="The zombie cat, not amused" width="280">
+</p>
+
 A stand-up meeting timer with a zombie cat in a graveyard. Every speaker gets 50 seconds –
 after that the cat grows impatient.
 
@@ -11,15 +15,20 @@ after that the cat grows impatient.
 |---|---|
 | Left click | Start the timer – or restart it at 0:50 while it runs |
 | Right click | The cat crawls back into its grave |
+| `B` | Lightning flash (counts like the automatic ones, so every second one is haunted) |
 | `F` | Toggle fullscreen |
 
 ## What happens
 
 - **Hidden:** the cat peeks out of the grave, the title "Stand-Up Cat" is shown.
-- **0:50 → 0:00:** the cat climbs up and drifts between neutral and happy.
-- **From 0:00:** not amused, the timer runs into overtime.
+- **0:50 → 0:00:** the cat climbs up, now and then turns happy or looks around.
+- **From 0:06:** the cat heads for not amused, so no happy face is left once the digits turn red.
+- **From 0:00:** not amused (three variants), the timer runs into overtime.
+- **From −0:20:** rain.
 - **From −0:30:** angry, with a lightning flash, and the picture slowly turns red.
-- **From −0:45:** rain. **From −1:00:** random lightning.
+- **From −1:00:** random lightning.
+- **Did you see that?** The first flash of a round and every second one after it briefly reveal
+  an evil moon, a crow skeleton and a skull with glowing eyes – gone once the light fades.
 - **Restart:** the timer spins back to 0:50 while the cat calms down in a hurry.
 
 ## Player
@@ -30,8 +39,9 @@ try other backgrounds, playback speed and bobbing. URL options: `?ui=0`, `?bg=tr
 
 ## Code
 
-`cat.js` holds what app and player share: the clip list (`CLIPS`, with random variants per
-loop or transition), the mood machine, the graveyard scene and the bobbing. `index.html` adds
+`cat.js` holds what app and player share: the clip list (`CLIPS`, with variants per loop or
+transition drawn from a shuffle bag, plus extra clips played on request), the mood machine, the
+graveyard scene and the bobbing. `index.html` adds
 the timer, the weather and the input; `player/index.html` adds the player controls.
 
 ## Settings

@@ -1,7 +1,8 @@
 // Shared zombie cat engine for the timer app (index.html) and the player (player/index.html).
 //
 // - Clips: every mood has one or more loops, every mood change one or more transition clips.
-//   Variants are picked at random, so new clips only need an entry in CLIPS.
+//   Variants are drawn from a shuffle bag: random order, but each one comes up equally often.
+//   Extras are single clips of a mood that only play when asked for (cat.playOnce).
 // - Mood machine: changes wait for the end of the running clip and follow the shortest chain of
 //   transitions, so the animation never jumps.
 // - Scene: graveyard picture, cat, cut-out front rim on top (hides the clips' hard bottom edge).
@@ -12,8 +13,12 @@ const CLIPS = {
   loops: {
     neutral:   ["neutral_loop"],
     happy:     ["happy_loop"],
-    notamused: ["notamused_loop"],
+    notamused: ["notamused_loop", "notamused_eye", "notamused_grim"],
     angry:     ["angry_loop"],
+  },
+  // Clips that start and end in a mood's pose but are only played on request.
+  extras: {
+    neutral_look: "neutral",
   },
   transitions: {
     "neutral>happy":     ["neutral_to_happy"],
@@ -42,9 +47,31 @@ function moodPath(from, to) {
   return steps;
 }
 
-// Random pick among the variants; repeats are allowed so the order never looks mechanical.
-function pickVariant(list) {
-  return list[Math.floor(Math.random() * list.length)];
+// Shuffle bag: hands out every item once in random order, then reshuffles. Over time all items come
+// up equally often, and none is missing for long. A new round never starts with the item that
+// ended the previous one, so nothing plays twice in a row.
+function createBag(items) {
+  let bag = [];
+  let last = null;
+  return function draw() {
+    if (!bag.length) {
+      bag = [...items];
+      for (let i = bag.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [bag[i], bag[j]] = [bag[j], bag[i]];
+      }
+      if (bag.length > 1 && bag[bag.length - 1] === last) [bag[0], bag[bag.length - 1]] = [bag[bag.length - 1], bag[0]];
+    }
+    last = bag.pop();
+    return last;
+  };
+}
+
+const bags = {};
+function pickVariant(key, list) {
+  if (list.length === 1) return list[0];
+  bags[key] ??= createBag(list);
+  return bags[key]();
 }
 
 const easeInOutCubic = p => p < 0.5 ? 4 * p * p * p : 1 - (-2 * p + 2) ** 3 / 2;
@@ -63,9 +90,11 @@ function createCat(options) {
   let transitioning = false;
   let awaitingStart = false;
   let hurry = false;         // calming down: play everything faster until the target is reached
+  let pendingOnce = null;    // extra clip to play at the end of the current loop cycle
   let speed = opts.speed;
 
-  const all = [...Object.values(CLIPS.loops).flat(), ...Object.values(CLIPS.transitions).flat()];
+  const all = [...Object.values(CLIPS.loops).flat(), ...Object.values(CLIPS.transitions).flat(),
+    ...Object.keys(CLIPS.extras)];
   for (const name of all) {
     const v = document.createElement("video");
     v.src = `${opts.clipBase}${name}.webm`;
@@ -110,24 +139,45 @@ function createCat(options) {
     if (target === mood) {
       transitioning = false;
       hurry = false;
-      // A single loop repeats seamlessly by itself; with variants every cycle picks anew.
+      if (pendingOnce) {
+        const once = pendingOnce;
+        pendingOnce = null;
+        show(once, speed, false);
+        return;
+      }
+      // A single loop repeats seamlessly by itself; with variants every cycle draws from the bag.
       const loops = CLIPS.loops[mood];
-      show(pickVariant(loops), speed, loops.length === 1);
+      show(pickVariant(`loop:${mood}`, loops), speed, keepLooping());
     } else {
       const steps = moodPath(mood, target);
       transitioning = true;
       const [a, b] = steps[0];
-      show(pickVariant(CLIPS.transitions[`${a}>${b}`]),
+      show(pickVariant(`${a}>${b}`, CLIPS.transitions[`${a}>${b}`]),
         speed * (hurry || steps.length > 1 ? opts.chainSpeed : 1), false);
     }
+  }
+
+  // Whether the running loop may simply repeat: only a single loop with nothing else pending.
+  function keepLooping() {
+    return target === mood && CLIPS.loops[mood].length === 1 && !pendingOnce;
   }
 
   // Changes wait for the end of the current loop or transition, so the animation never jumps.
   function setMood(m) {
     if (!MOODS.includes(m)) return;
     target = m;
-    if (!transitioning && active) active.loop = target === mood && CLIPS.loops[mood].length === 1;
+    if (pendingOnce && CLIPS.extras[pendingOnce] !== m) pendingOnce = null;
+    if (!transitioning && active) active.loop = keepLooping();
     opts.onChange?.();
+  }
+
+  // Play an extra clip of the current mood once, at the end of the running loop cycle.
+  function playOnce(name) {
+    if (CLIPS.extras[name] !== target) return false;
+    pendingOnce = name;
+    if (!transitioning && active) active.loop = false;
+    opts.onChange?.();
+    return true;
   }
 
   // Calm down quickly: speed up the clip that is playing right now and every step until the target.
@@ -153,7 +203,8 @@ function createCat(options) {
   queueMicrotask(next);
 
   return {
-    setMood, hurryTo, setSpeed, frame, videos,
+    setMood, hurryTo, playOnce, setSpeed, frame, videos,
+    get pendingOnce() { return pendingOnce; },
     get mood() { return mood; },
     get target() { return target; },
     get clip() { return activeName; },
