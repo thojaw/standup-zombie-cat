@@ -20,7 +20,7 @@ after that the cat grows impatient.
 - **0:50 → 0:00:** the cat climbs up, now and then turns happy or looks around.
 - **From 0:06:** the cat heads for not amused, so no happy face is left once the digits turn red.
 - **From 0:00:** not amused (three variants), the timer runs into overtime.
-- **From −0:25:** rain.
+- **From −0:20:** rain.
 - **From −0:30:** angry, with a lightning flash, and the picture slowly turns red.
 - **From −1:00:** random lightning.
 - **Did you see that?** The first flash of a round and every second one after it briefly reveal
