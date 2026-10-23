@@ -50,6 +50,7 @@ const CONFIG = {
   scare: true,            // once per round, deep in overtime, the angry cat turns into a skull for a moment
   scareWindow: [80, 95],  // seconds of overtime within which the skull scare happens (random each round)
   scareSize: 1.5,         // skull size relative to the cat
+  scareLift: 120,         // px the skull sits above the cat's head (it rises out of the grave)
   scareHoldMs: 300,       // the skull's last frame stays this long before the cat is back
   flashDelay: 0,        // ms after "not amused -> angry" has finished until the lightning flash
   speed: 1.5,             // clip playback speed
@@ -269,7 +270,7 @@ function drawSkull(now, yOffset) {
   const c = SCENE.cat;
   const size = c.size * CONFIG.scareSize;
   const headX = c.x + c.size / 2;
-  const headY = c.y + yOffset + c.size * 0.47;
+  const headY = c.y + yOffset + c.size * 0.47 - CONFIG.scareLift;
   ctx.drawImage(skull, headX - size / 2, headY - size * 0.47, size, size);
 }
 
