@@ -27,7 +27,7 @@ after that the cat grows impatient.
 - **From −0:20:** rain.
 - **From −0:30:** angry, with a lightning flash, and the picture slowly turns red.
 - **From −1:00:** random lightning.
-- **Around −2:00:** once per round, at a random moment, something nasty happens. (Switch it off
+- **Around −1:20:** once per round, at a random moment, something nasty happens. (Switch it off
   with `?scare=0` or `scare: false` in `CONFIG`.)
 - **Did you see that?** The first flash of a round and every second one after it briefly reveal
   an evil moon, a crow skeleton and a skull with glowing eyes – gone once the light fades.
