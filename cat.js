@@ -241,12 +241,13 @@ function createScene(assetBase) {
       catCtx.fillRect(0, 0, 640, 640);
       haveFrame = true;
     },
-    // yOffset moves the cat up (negative) or down inside the grave.
-    draw(ctx, yOffset) {
+    // yOffset moves the cat up (negative) or down inside the grave; showCat = false leaves the
+    // grave empty (the cat keeps playing, it is just not drawn).
+    draw(ctx, yOffset, showCat = true) {
       const c = SCENE.cat;
       ctx.globalCompositeOperation = "source-over";
       ctx.drawImage(bg, 0, 0);
-      if (haveFrame) ctx.drawImage(catLayer, c.x, c.y + yOffset, c.size, c.size);
+      if (haveFrame && showCat) ctx.drawImage(catLayer, c.x, c.y + yOffset, c.size, c.size);
       ctx.drawImage(fg, 0, 0);
     },
   };
