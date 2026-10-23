@@ -47,6 +47,10 @@ const CONFIG = {
   stormGap: [4, 12],      // random pause between two storm flashes, in seconds
   hauntEvery: 2,          // the 1st lightning flash of a round and then every 2nd one shows the haunted scene
   hauntMs: [420, 560],    // the haunted details show this long during such a flash, then fade out
+  scare: true,            // once per round, deep in overtime, the angry cat turns into a skull for a moment
+  scareWindow: [115, 130],// seconds of overtime within which the skull scare happens (random each round)
+  scareSize: 1.5,         // skull size relative to the cat
+  scareHoldMs: 300,       // the skull's last frame stays this long before the cat is back
   flashDelay: 0,        // ms after "not amused -> angry" has finished until the lightning flash
   speed: 1.5,             // clip playback speed
   chainSpeed: 2,          // extra speed factor for multi-step mood changes and for calming down
@@ -72,6 +76,17 @@ const scene = createScene("scene/");
 // Haunted details (evil moon, crow skeleton, glowing skull eyes), only visible during some flashes.
 const haunt = new Image(); haunt.src = "scene/scene_haunt.png";
 let talkBag = createBag(["happy", "look"]);
+// Skull scare: half a second of the cat turning into a snarling skull (clip runs backwards from
+// the original video). It interrupts the cat, which keeps playing unseen and is back afterwards.
+const skull = document.createElement("video");
+skull.src = "clips/skull_scare.webm";
+skull.muted = true;
+skull.playsInline = true;
+skull.preload = "auto";
+document.body.appendChild(skull);
+let scareAt = null;          // overtime (negative seconds) of this round's scare; null once it happened
+let scareStart = -Infinity;
+let scareFlickered = false;
 const bobOffset = createBob();
 const canvas = document.getElementById("view");
 const ctx = canvas.getContext("2d");
@@ -139,6 +154,8 @@ function start(now) {
   // Every round (= speaker) starts fresh: both talk variants come up, the first flash is haunted.
   talkBag = createBag(["happy", "look"]);
   flashCount = 0;
+  const [sa, sb] = CONFIG.scareWindow;
+  scareAt = -(sa + Math.random() * (sb - sa));
   if (phase === "hidden") {
     rewind = null;
     tweenTo(lift, 0, CONFIG.riseSeconds, now);
@@ -210,11 +227,50 @@ function flashLevel(now) {
 let flashCount = 0;      // flashes in this round
 let flashHaunted = false;
 
-function flash(now, power) {
+// mode "count": a regular flash, every hauntEvery-th one of a round is haunted.
+// "haunted" / "plain": always or never haunted, and not counted (used by the skull scare).
+function flash(now, power, mode = "count") {
   flashAt = now;
   flashPower = power;
-  flashCount++;
-  flashHaunted = (flashCount - 1) % CONFIG.hauntEvery === 0;
+  if (mode === "count") {
+    flashCount++;
+    flashHaunted = (flashCount - 1) % CONFIG.hauntEvery === 0;
+  } else {
+    flashHaunted = mode === "haunted";
+  }
+}
+
+const scareMs = () => (skull.duration || 0.5) * 1000 + CONFIG.scareHoldMs;
+const scareShowing = now => now - scareStart < scareMs();
+
+// Deep in overtime, once per round: a haunted flash, and the angry cat is a snarling skull for a
+// moment. A second, weaker flicker covers the cat's return.
+function updateScare(now, rem) {
+  if (scareShowing(now)) {
+    if (!scareFlickered && now - scareStart >= scareMs() - 120) {
+      scareFlickered = true;
+      flash(now, 0.7, "plain");
+    }
+    return;
+  }
+  if (!CONFIG.scare || scareAt === null || phase !== "running" || rem > scareAt || cat.mood !== "angry") return;
+  scareAt = null;
+  scareStart = now;
+  scareFlickered = false;
+  skull.currentTime = 0;
+  skull.play().catch(() => {});
+  flash(now, 1, "haunted");
+}
+
+function drawSkull(now, yOffset) {
+  // While the restart seek is running the element may still show last round's final frame.
+  if (!scareShowing(now) || skull.readyState < 2 || skull.seeking) return;
+  // Centred on the cat's head and scaled up; the skull has no body, so it may rise over the rim.
+  const c = SCENE.cat;
+  const size = c.size * CONFIG.scareSize;
+  const headX = c.x + c.size / 2;
+  const headY = c.y + yOffset + c.size * 0.47;
+  ctx.drawImage(skull, headX - size / 2, headY - size * 0.47, size, size);
 }
 
 // The haunted details stay while the light flickers and vanish in the afterglow, so the viewer is
@@ -284,13 +340,16 @@ function draw(now) {
   scene.updateCat(cat.frame());
 
   if (scene.ready) {
-    scene.draw(ctx, tweenValue(lift, now) + bobOffset(now) * tweenValue(bobAmount, now));
+    const catY = tweenValue(lift, now) + bobOffset(now) * tweenValue(bobAmount, now);
+    updateScare(now, remaining(now));
+    scene.draw(ctx, catY, !scareShowing(now));
     const h = hauntLevel(now);
     if (h > 0 && haunt.complete) {
       ctx.globalAlpha = h;
       ctx.drawImage(haunt, 0, 0);
       ctx.globalAlpha = 1;
     }
+    drawSkull(now, catY);
 
     // Red tint follows the overtime, so it also fades while the timer spins back.
     const rem = remaining(now);
@@ -354,6 +413,9 @@ document.addEventListener("keydown", e => {
   if ((e.key === "b" || e.key === "B") && !e.repeat) flash(performance.now(), 1);
 });
 setTimeout(() => { document.getElementById("hint").style.opacity = 0; }, 6000);
+
+// ?scare=0 switches the skull scare off.
+if (new URLSearchParams(location.search).get("scare") === "0") CONFIG.scare = false;
 
 // Scripting hook for testing or remote control.
 window.standupCat = {
