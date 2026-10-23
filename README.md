@@ -1,5 +1,9 @@
 # Stand-Up Zombie Cat
 
+<p align="center">
+  <img src="docs/cat-unamused.png" alt="The zombie cat, not amused" width="280">
+</p>
+
 A stand-up meeting timer with a zombie cat in a graveyard. Every speaker gets 50 seconds –
 after that the cat grows impatient.
 
