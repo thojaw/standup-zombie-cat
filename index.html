@@ -30,17 +30,19 @@
 </head>
 <body>
 <canvas id="view" width="1672" height="941"></canvas>
-<div id="hint">Klick: Start / Neustart · Rechtsklick: Katze verstecken · F: Vollbild</div>
+<div id="hint">Klick: Start / Neustart · Rechtsklick: Katze verstecken · B: Blitz · F: Vollbild</div>
 <script src="cat.js"></script>
 <script>
 // ---- Settings -------------------------------------------------------------------------------
 const CONFIG = {
   title: "Stand-Up Cat",  // shown instead of the timer while the cat hides
   talkSeconds: 50,        // time per speaker
+  talkCutoff: 12,         // seconds left: no new happy/look moments, a happy cat returns to neutral
+  notAmusedLead: 6,       // seconds left: head for "not amused", so it is there before the digits turn red
   angryAfter: 30,         // seconds of overtime until the cat gets angry
   redFullAfter: 30,       // seconds after turning angry until the red tint is at full strength
   redMax: 0.55,           // strength of the red tint
-  rainAfter: 45,          // seconds of overtime until it starts to rain
+  rainAfter: 25,          // seconds of overtime until it starts to rain
   stormAfter: 60,         // seconds of overtime until random lightning starts
   stormGap: [4, 12],      // random pause between two storm flashes, in seconds
   hauntEvery: 2,          // the 1st lightning flash of a round and then every 2nd one shows the haunted scene
@@ -170,8 +172,11 @@ function randomSwap() {
 function updateMood(now) {
   if (phase !== "running") return;
   const rem = remaining(now);
+  // A mood change waits for the running clip (up to ~2.7 s) and happy -> not amused passes neutral,
+  // so the cat has to leave happy well before 0:00 to show no happy face once the digits turn red.
   if (rem <= -CONFIG.angryAfter) setMood("angry");
-  else if (rem <= 0) setMood("notamused");
+  else if (rem <= CONFIG.notAmusedLead) setMood("notamused");
+  else if (rem <= CONFIG.talkCutoff) { if (cat.target === "happy") setMood("neutral"); }
   else if (now >= nextSwap) {
     // Talking time: from happy back to neutral; from neutral either to happy or a look around.
     // The bag alternates both in random order, so within 50 s each shows up at least once.
@@ -345,6 +350,8 @@ document.addEventListener("keydown", e => {
     if (document.fullscreenElement) document.exitFullscreen();
     else document.documentElement.requestFullscreen().catch(() => {});
   }
+  // Lightning on demand; it counts like any other flash, so every second one is haunted.
+  if ((e.key === "b" || e.key === "B") && !e.repeat) flash(performance.now(), 1);
 });
 setTimeout(() => { document.getElementById("hint").style.opacity = 0; }, 6000);
 
