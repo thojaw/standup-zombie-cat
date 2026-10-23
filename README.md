@@ -16,10 +16,12 @@ after that the cat grows impatient.
 ## What happens
 
 - **Hidden:** the cat peeks out of the grave, the title "Stand-Up Cat" is shown.
-- **0:50 → 0:00:** the cat climbs up and drifts between neutral and happy.
-- **From 0:00:** not amused, the timer runs into overtime.
+- **0:50 → 0:00:** the cat climbs up, now and then turns happy or looks around.
+- **From 0:00:** not amused (three variants), the timer runs into overtime.
 - **From −0:30:** angry, with a lightning flash, and the picture slowly turns red.
 - **From −0:45:** rain. **From −1:00:** random lightning.
+- **Did you see that?** The first flash of a round and every second one after it briefly reveal
+  an evil moon, a crow skeleton and a skull with glowing eyes – gone once the light fades.
 - **Restart:** the timer spins back to 0:50 while the cat calms down in a hurry.
 
 ## Player
@@ -30,8 +32,9 @@ try other backgrounds, playback speed and bobbing. URL options: `?ui=0`, `?bg=tr
 
 ## Code
 
-`cat.js` holds what app and player share: the clip list (`CLIPS`, with random variants per
-loop or transition), the mood machine, the graveyard scene and the bobbing. `index.html` adds
+`cat.js` holds what app and player share: the clip list (`CLIPS`, with variants per loop or
+transition drawn from a shuffle bag, plus extra clips played on request), the mood machine, the
+graveyard scene and the bobbing. `index.html` adds
 the timer, the weather and the input; `player/index.html` adds the player controls.
 
 ## Settings

@@ -55,6 +55,9 @@
 <div id="stage" class="bg-friedhof"></div>
 <div id="ui">
   <div class="row" id="moods"></div>
+  <div class="row small" id="extras">
+    <span style="color:var(--muted);font-size:13px;align-self:center">Einmal-Clips:</span>
+  </div>
   <div id="status"></div>
   <div class="row small" id="bgs">
     <span style="color:var(--muted);font-size:13px;align-self:center">Hintergrund:</span>
@@ -72,7 +75,7 @@
   <div style="color:var(--muted);font-size:12px">
     Tasten <kbd>1</kbd>–<kbd>4</kbd> wechseln die Stimmung. Gewechselt wird am Ende des laufenden Clips;
     nicht direkt verbundene Stimmungen laufen über mehrere Übergänge. Gibt es mehrere Varianten
-    einer Stimmung, wird bei jedem Durchlauf zufällig gewählt.
+    einer Stimmung, wird bei jedem Durchlauf zufällig gewählt – alle gleich oft.
   </div>
 </div>
 <script src="../cat.js"></script>
@@ -141,8 +144,9 @@ function render() {
   });
   const route = cat.target === cat.mood ? "" :
     ` → Weg: ${[cat.mood, ...moodPath(cat.mood, cat.target).map(s => s[1])].map(m => LABELS[m]).join(" → ")}`;
+  const once = cat.pendingOnce ? ` (danach: ${cat.pendingOnce})` : "";
   document.getElementById("status").innerHTML =
-    `Stimmung: <b>${LABELS[cat.mood]}</b>${route}<br>Clip: <b>${cat.clip ?? "–"}</b>`;
+    `Stimmung: <b>${LABELS[cat.mood]}</b>${route}<br>Clip: <b>${cat.clip ?? "–"}</b>${once}`;
 }
 
 const moodRow = document.getElementById("moods");
@@ -153,6 +157,14 @@ MOODS.forEach((m, i) => {
   b.onclick = () => cat.setMood(m);
   moodRow.appendChild(b);
 });
+const extrasRow = document.getElementById("extras");
+for (const [name, m] of Object.entries(CLIPS.extras)) {
+  const b = document.createElement("button");
+  b.textContent = `${name} (${LABELS[m] ?? m})`;
+  b.title = `Spielt einmal, wenn die Katze ${LABELS[m] ?? m} ist`;
+  b.onclick = () => cat.playOnce(name);
+  extrasRow.appendChild(b);
+}
 const bgRow = document.getElementById("bgs");
 BACKGROUNDS.forEach(bg => {
   const b = document.createElement("button");
@@ -180,7 +192,7 @@ render();
 
 // Scripting hook, e.g. from OBS or a Stream Deck: zombieCat.setMood("angry")
 window.zombieCat = {
-  setMood: m => cat.setMood(m), setSpeed, setBackground, setBob,
+  setMood: m => cat.setMood(m), playOnce: n => cat.playOnce(n), setSpeed, setBackground, setBob,
   get mood() { return cat.mood; }, get target() { return cat.target; }, get clip() { return cat.clip; },
 };
 
