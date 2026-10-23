@@ -22,6 +22,18 @@ after that the cat grows impatient.
 - **From −0:45:** rain. **From −1:00:** random lightning.
 - **Restart:** the timer spins back to 0:50 while the cat calms down in a hurry.
 
+## Player
+
+`player/` shows the cat without the timer: switch moods with the buttons or keys `1`–`4`,
+try other backgrounds, playback speed and bobbing. URL options: `?ui=0`, `?bg=transparent`,
+`?speed=2`, `?bob=0.5`, `?mood=angry`.
+
+## Code
+
+`cat.js` holds what app and player share: the clip list (`CLIPS`, with random variants per
+loop or transition), the mood machine, the graveyard scene and the bobbing. `index.html` adds
+the timer, the weather and the input; `player/index.html` adds the player controls.
+
 ## Settings
 
 All timings live in `CONFIG` at the top of the script in `index.html`

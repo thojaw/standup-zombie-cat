@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zombie Cat Player</title>
+<link rel="icon" href="../favicon.ico" sizes="16x16 32x32 48x48 64x64">
+<style>
+  :root {
+    --bg: #15151a; --panel: #22222b; --text: #e8e6df; --muted: #9a978d;
+    --accent: #9bb35a; --btn: #2e2e39; --btn-hover: #3a3a48;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+    font: 15px/1.4 system-ui, sans-serif; display: flex; flex-direction: column; align-items: center;
+    gap: 16px; padding: 16px;
+  }
+  #stage {
+    position: relative; width: min(480px, 100%); aspect-ratio: 1; border-radius: 12px; overflow: hidden;
+  }
+  #stage.bg-checker {
+    background: repeating-conic-gradient(#bbb 0 25%, #888 0 50%) 0 0 / 24px 24px;
+  }
+  #stage.bg-dark { background: #0b0b0e; }
+  #stage.bg-green { background: #2f6b3a; }
+  #stage.bg-blue { background: #2a5bc8; }
+  #stage.bg-transparent { background: transparent; }
+  #stage.bg-friedhof { aspect-ratio: 1672 / 941; width: min(960px, 100%); border-radius: 12px; }
+  /* Videos only decode; everything visible is drawn onto the canvas. */
+  #stage video {
+    position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none;
+  }
+  #stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #ui { display: flex; flex-direction: column; gap: 12px; width: min(600px, 100%); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  button {
+    flex: 1; min-width: 100px; padding: 10px 12px; border: 2px solid transparent; border-radius: 8px;
+    background: var(--btn); color: var(--text); font: inherit; cursor: pointer;
+  }
+  button:hover { background: var(--btn-hover); }
+  button.current { border-color: var(--accent); }
+  button.target { border-color: var(--accent); border-style: dashed; }
+  .small button { flex: 0 1 auto; min-width: 0; padding: 6px 10px; font-size: 13px; }
+  #status { background: var(--panel); border-radius: 8px; padding: 10px 12px; font-size: 13px; color: var(--muted); }
+  #status b { color: var(--text); font-weight: 600; }
+  kbd { background: var(--btn); border-radius: 4px; padding: 0 5px; font-size: 12px; }
+  body.no-ui { background: transparent; padding: 0; }
+  body.no-ui #ui { display: none; }
+  body.no-ui #stage { width: 100vmin; border-radius: 0; }
+  body.no-ui #stage.bg-friedhof { width: min(100vw, calc(100vh * 1672 / 941)); }
+</style>
+</head>
+<body>
+<div id="stage" class="bg-friedhof"></div>
+<div id="ui">
+  <div class="row" id="moods"></div>
+  <div id="status"></div>
+  <div class="row small" id="bgs">
+    <span style="color:var(--muted);font-size:13px;align-self:center">Hintergrund:</span>
+  </div>
+  <div class="row small" style="align-items:center">
+    <span style="color:var(--muted);font-size:13px">Tempo:</span>
+    <input type="range" id="speed" min="0.5" max="3" step="0.25" style="flex:1">
+    <span id="speedLabel" style="font-size:13px;min-width:3em"></span>
+  </div>
+  <div class="row small" style="align-items:center">
+    <span style="color:var(--muted);font-size:13px">Wippen (nur Friedhof):</span>
+    <input type="range" id="bob" min="0" max="1" step="0.1" style="flex:1">
+    <span id="bobLabel" style="font-size:13px;min-width:3em"></span>
+  </div>
+  <div style="color:var(--muted);font-size:12px">
+    Tasten <kbd>1</kbd>–<kbd>4</kbd> wechseln die Stimmung. Gewechselt wird am Ende des laufenden Clips;
+    nicht direkt verbundene Stimmungen laufen über mehrere Übergänge. Gibt es mehrere Varianten
+    einer Stimmung, wird bei jedem Durchlauf zufällig gewählt.
+  </div>
+</div>
+<script src="../cat.js"></script>
+<script>
+const LABELS = { neutral: "Neutral", happy: "Happy", notamused: "Not Amused", angry: "Angry" };
+const BACKGROUNDS = ["friedhof", "checker", "dark", "green", "blue", "transparent"];
+
+const params = new URLSearchParams(location.search);
+const stage = document.getElementById("stage");
+let speed = Number(params.get("speed")) || 1.5;
+let bobStrength = 1;
+
+const cat = createCat({
+  clipBase: "../clips/",
+  container: stage,
+  speed,
+  mood: MOODS.includes(params.get("mood")) ? params.get("mood") : "neutral",
+  onChange: () => render(),
+});
+const scene = createScene("../scene/");
+const bobOffset = createBob();
+
+// All output goes through one canvas, which keeps the last frame while a clip switch settles.
+const canvas = document.createElement("canvas");
+stage.appendChild(canvas);
+const ctx = canvas.getContext("2d");
+let sceneOn = false;
+
+function setBackground(bg) {
+  stage.className = `bg-${bg}`;
+  sceneOn = bg === "friedhof";
+  canvas.width = sceneOn ? SCENE.width : 640;
+  canvas.height = sceneOn ? SCENE.height : 640;
+}
+
+function draw(now) {
+  const v = cat.frame();
+  if (sceneOn) {
+    scene.updateCat(v);
+    if (scene.ready) scene.draw(ctx, bobOffset(now) * bobStrength);
+  } else if (v) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+  }
+  requestAnimationFrame(draw);
+}
+
+function setSpeed(s) {
+  speed = s;
+  cat.setSpeed(s);
+  document.getElementById("speed").value = s;
+  document.getElementById("speedLabel").textContent = `${s}×`;
+}
+
+function setBob(s) {
+  bobStrength = s;
+  document.getElementById("bob").value = s;
+  document.getElementById("bobLabel").textContent = s ? `${Math.round(s * 100)}%` : "aus";
+}
+
+function render() {
+  if (params.get("ui") === "0") return;
+  document.querySelectorAll("#moods button").forEach(b => {
+    b.classList.toggle("current", b.dataset.id === cat.mood && cat.target === cat.mood);
+    b.classList.toggle("target", b.dataset.id === cat.target && cat.target !== cat.mood);
+  });
+  const route = cat.target === cat.mood ? "" :
+    ` → Weg: ${[cat.mood, ...moodPath(cat.mood, cat.target).map(s => s[1])].map(m => LABELS[m]).join(" → ")}`;
+  document.getElementById("status").innerHTML =
+    `Stimmung: <b>${LABELS[cat.mood]}</b>${route}<br>Clip: <b>${cat.clip ?? "–"}</b>`;
+}
+
+const moodRow = document.getElementById("moods");
+MOODS.forEach((m, i) => {
+  const b = document.createElement("button");
+  b.dataset.id = m;
+  b.textContent = `${i + 1} · ${LABELS[m] ?? m}`;
+  b.onclick = () => cat.setMood(m);
+  moodRow.appendChild(b);
+});
+const bgRow = document.getElementById("bgs");
+BACKGROUNDS.forEach(bg => {
+  const b = document.createElement("button");
+  b.textContent = bg;
+  b.onclick = () => setBackground(bg);
+  bgRow.appendChild(b);
+});
+document.getElementById("speed").oninput = e => setSpeed(Number(e.target.value));
+document.getElementById("bob").oninput = e => setBob(Number(e.target.value));
+document.addEventListener("keydown", e => {
+  const m = MOODS[Number(e.key) - 1];
+  if (m) cat.setMood(m);
+});
+
+// URL options: ?ui=0 hides the controls, ?bg=transparent etc. picks the background (e.g. for OBS),
+// ?speed=2 sets the playback speed (default 1.5), ?cat=610,452,460 places the cat in the scene (x,y,size),
+// ?bob=0.5 sets the bobbing strength in the scene (0 = off, 1 = full), ?mood=angry the start mood.
+if (params.get("ui") === "0") document.body.classList.add("no-ui");
+setBackground(BACKGROUNDS.includes(params.get("bg")) ? params.get("bg") : "friedhof");
+const catPos = (params.get("cat") || "").split(",").map(Number);
+if (catPos.length === 3 && catPos.every(n => n > 0)) [SCENE.cat.x, SCENE.cat.y, SCENE.cat.size] = catPos;
+setSpeed(speed);
+setBob(params.has("bob") ? Math.min(1, Math.max(0, Number(params.get("bob")) || 0)) : 1);
+render();
+
+// Scripting hook, e.g. from OBS or a Stream Deck: zombieCat.setMood("angry")
+window.zombieCat = {
+  setMood: m => cat.setMood(m), setSpeed, setBackground, setBob,
+  get mood() { return cat.mood; }, get target() { return cat.target; }, get clip() { return cat.clip; },
+};
+
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>

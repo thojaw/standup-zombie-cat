@@ -31,6 +31,7 @@
 <body>
 <canvas id="view" width="1672" height="941"></canvas>
 <div id="hint">Klick: Start / Neustart · Rechtsklick: Katze verstecken · F: Vollbild</div>
+<script src="cat.js"></script>
 <script>
 // ---- Settings -------------------------------------------------------------------------------
 const CONFIG = {
@@ -52,115 +53,21 @@ const CONFIG = {
   hideSeconds: 1.6,       // how long it needs to crawl back
 };
 
-// ---- Clips and mood graph -------------------------------------------------------------------
-const MOODS = ["neutral", "happy", "notamused", "angry"];
-const EDGES = [
-  ["neutral", "happy"], ["happy", "neutral"],
-  ["neutral", "notamused"], ["notamused", "neutral"],
-  ["notamused", "angry"], ["angry", "notamused"],
-];
-const videos = {};
-function makeVideo(name, loop) {
-  const v = document.createElement("video");
-  v.src = `clips/${name}.webm`;
-  v.muted = true;
-  v.playsInline = true;
-  v.preload = "auto";
-  v.loop = loop;
-  document.body.appendChild(v);
-  videos[name] = v;
-}
-MOODS.forEach(m => makeVideo(`${m}_loop`, true));
-EDGES.forEach(([a, b]) => makeVideo(`${a}_to_${b}`, false));
-
-// Shortest chain of transitions from one mood to another (BFS).
-function path(from, to) {
-  const prev = { [from]: null };
-  const queue = [from];
-  while (queue.length) {
-    const cur = queue.shift();
-    if (cur === to) break;
-    for (const [a, b] of EDGES) if (a === cur && !(b in prev)) { prev[b] = cur; queue.push(b); }
-  }
-  const steps = [];
-  for (let m = to; m in prev && prev[m] !== null; m = prev[m]) steps.unshift([prev[m], m]);
-  return steps;
-}
-
-let mood = "neutral";
-let target = "neutral";
-let active = null;
-let transitioning = false;
-let awaitingStart = false;
-let hurry = false;       // calming down after a restart/hide: play everything faster until settled
-
-function show(v, rate) {
-  const old = active;
-  active = v;
-  // Until the seek to 0 has landed, the element may still hold a frame from its last run.
-  awaitingStart = v.readyState > 0;   // a fresh element has no old frame to wait out
-  v.addEventListener("seeked", () => { if (active === v) awaitingStart = false; }, { once: true });
-  v.currentTime = 0;
-  v.playbackRate = rate;
-  v.play().catch(() => {});
-  if (old && old !== v) old.pause();
-}
-
-function next() {
-  if (target === mood) {
-    transitioning = false;
-    hurry = false;
-    const loop = videos[`${mood}_loop`];
-    loop.loop = true;
-    show(loop, CONFIG.speed);
-  } else {
-    const steps = path(mood, target);
-    transitioning = true;
-    show(videos[`${steps[0][0]}_to_${steps[0][1]}`],
-      CONFIG.speed * (hurry || steps.length > 1 ? CONFIG.chainSpeed : 1));
-  }
-}
-
-for (const [name, v] of Object.entries(videos)) {
-  v.addEventListener("ended", () => {
-    if (v !== active) return;
-    if (name.includes("_to_")) mood = name.split("_to_")[1];
-    if (name === "notamused_to_angry") flash(performance.now() + CONFIG.flashDelay, 1);
-    next();
-  });
-}
-
-// Changes wait for the end of the current loop or transition, so the animation never jumps.
-function setMood(m) {
-  target = m;
-  if (!transitioning && active) active.loop = target === mood;
-}
-
-// Calm down quickly: speed up the clip that is playing right now and every step until the target.
-function hurryTo(m) {
-  setMood(m);
-  if (target === mood && !transitioning) return;
-  hurry = true;
-  if (active) active.playbackRate = CONFIG.speed * CONFIG.chainSpeed;
-}
-
-// ---- Scene ----------------------------------------------------------------------------------
-const SCENE = { cat: { x: 610, y: 452, size: 460 } };
-const sceneBg = new Image(); sceneBg.src = "scene/scene_bg.jpg";
-const sceneFg = new Image(); sceneFg.src = "scene/scene_fg.png";
+// ---- Cat and scene (cat.js) -----------------------------------------------------------------
+const cat = createCat({
+  clipBase: "clips/",
+  container: document.body,
+  speed: CONFIG.speed,
+  chainSpeed: CONFIG.chainSpeed,
+  onTransitionEnd(from, to) {
+    if (from === "notamused" && to === "angry") flash(performance.now() + CONFIG.flashDelay, 1);
+  },
+});
+const setMood = m => cat.setMood(m);
+const scene = createScene("scene/");
+const bobOffset = createBob();
 const canvas = document.getElementById("view");
 const ctx = canvas.getContext("2d");
-
-// Cat layer: last valid video frame, darkened towards the bottom as if inside the hole.
-const catLayer = document.createElement("canvas");
-catLayer.width = catLayer.height = 640;
-const catCtx = catLayer.getContext("2d");
-const shade = catCtx.createLinearGradient(0, 380, 0, 640);
-shade.addColorStop(0, "rgba(0,0,0,0)");
-shade.addColorStop(1, "rgba(0,0,0,0.55)");
-let haveFrame = false;
-
-const easeInOutCubic = p => p < 0.5 ? 4 * p * p * p : 1 - (-2 * p + 2) ** 3 / 2;
 
 // A tweened value: moves from its current value to a new one with cubic ease-in-out.
 function tween(value) {
@@ -175,21 +82,6 @@ function tweenTo(t, to, seconds, now) {
 function tweenValue(t, now) {
   const p = Math.min(1, Math.max(0, (now - t.start) / t.dur));
   return t.from + (t.to - t.from) * easeInOutCubic(p);
-}
-
-// Bobbing: random heights between 32 px up and 28 px down; above 36 px the clip's cut edge would show.
-const BOB = { up: 32, down: 28, minDur: 1.5, maxDur: 3.5 };
-let bob = { from: 0, to: 0, start: 0, dur: 1 };
-function bobOffset(now) {
-  let p = (now - bob.start) / (bob.dur * 1000);
-  if (p >= 1) {
-    const range = BOB.up + BOB.down;
-    let to;
-    do to = -BOB.up + Math.random() * range; while (Math.abs(to - bob.to) < range / 3);
-    bob = { from: bob.to, to, start: now, dur: BOB.minDur + Math.random() * (BOB.maxDur - BOB.minDur) };
-    p = 0;
-  }
-  return bob.from + (bob.to - bob.from) * easeInOutCubic(p);
 }
 
 const lift = tween(CONFIG.hiddenOffset);   // extra y offset: hidden = low, active = 0
@@ -247,7 +139,7 @@ function start(now) {
     nextSwap = now + randomSwap();
   } else {
     // Restart: the cat calms down in a hurry while the timer spins back to 0:50.
-    hurryTo("happy");
+    cat.hurryTo("happy");
     spinBack(now, "running");
     phase = "rewinding";
   }
@@ -259,7 +151,7 @@ function hide(now) {
   phase = "hidden";
   tweenTo(lift, CONFIG.hiddenOffset, CONFIG.hideSeconds, now);
   tweenTo(bobAmount, 0.25, CONFIG.hideSeconds, now);
-  hurryTo("neutral");
+  cat.hurryTo("neutral");
 }
 
 function randomSwap() {
@@ -274,7 +166,7 @@ function updateMood(now) {
   else if (rem <= 0) setMood("notamused");
   else if (now >= nextSwap) {
     // Talking time: drift between neutral and happy.
-    setMood(target === "happy" ? "neutral" : "happy");
+    setMood(cat.target === "happy" ? "neutral" : "happy");
     nextSwap = now + randomSwap();
   }
 }
@@ -358,23 +250,10 @@ function draw(now) {
   updateRewind(now);
   updateMood(now);
 
-  const v = active;
-  if (v && v.readyState >= 2 && !v.seeking && !awaitingStart) {
-    catCtx.globalCompositeOperation = "copy";
-    catCtx.drawImage(v, 0, 0, 640, 640);
-    catCtx.globalCompositeOperation = "source-atop";
-    catCtx.fillStyle = shade;
-    catCtx.fillRect(0, 0, 640, 640);
-    haveFrame = true;
-  }
+  scene.updateCat(cat.frame());
 
-  if (sceneBg.complete && sceneFg.complete) {
-    const c = SCENE.cat;
-    const y = c.y + tweenValue(lift, now) + bobOffset(now) * tweenValue(bobAmount, now);
-    ctx.globalCompositeOperation = "source-over";
-    ctx.drawImage(sceneBg, 0, 0);
-    if (haveFrame) ctx.drawImage(catLayer, c.x, y, c.size, c.size);
-    ctx.drawImage(sceneFg, 0, 0);
+  if (scene.ready) {
+    scene.draw(ctx, tweenValue(lift, now) + bobOffset(now) * tweenValue(bobAmount, now));
 
     // Red tint follows the overtime, so it also fades while the timer spins back.
     const rem = remaining(now);
@@ -441,14 +320,13 @@ setTimeout(() => { document.getElementById("hint").style.opacity = 0; }, 6000);
 window.standupCat = {
   start: () => start(performance.now()),
   hide: () => hide(performance.now()),
-  get state() { return { phase, mood, target, remaining: remaining(performance.now()) }; },
+  get state() { return { phase, mood: cat.mood, target: cat.target, clip: cat.clip, remaining: remaining(performance.now()) }; },
   config: CONFIG,
 };
 
 // Canvas text does not trigger web font loading by itself.
 document.fonts.load("212px Creepster").catch(() => {});
 
-next();
 requestAnimationFrame(draw);
 </script>
 </body>
